@@ -27,9 +27,8 @@ A Python-based tool for performing semantic-aware code mutations on Rust source 
 - `build/` - (created by the script) will contain the built `my-languages.so` shared library.
 
 1. Clone this repository:
-
-```bash
 Quick setup (Linux)
+```bash
 git clone <repository-url>
 cd cst-tree
 ```
