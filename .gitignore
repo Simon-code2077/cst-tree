@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+env/
+venv/
+
+# Build artifacts
+build/
+*.o
+*.a
+
+# Vendor dependencies (external git repos)
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test outputs
+*_result.rs
+mutated.rs
+
+# Temporary files
+*.tmp
+*.bak
