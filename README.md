@@ -28,7 +28,8 @@ A Python-based tool for performing semantic-aware code mutations on Rust source 
 
 1. Clone this repository:
 
-```bashQuick setup (Linux)
+```bash
+Quick setup (Linux)
 
 git clone <repository-url>
 
