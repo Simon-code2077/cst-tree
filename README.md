@@ -32,7 +32,7 @@ A Python-based tool for performing semantic-aware code mutations on Rust source 
 Quick setup (Linux)
 git clone <repository-url>
 cd cst-tree
-```bash
+```
 
 2. Run the setup script
 
