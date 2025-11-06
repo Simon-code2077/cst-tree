@@ -40,7 +40,7 @@ cd cst-tree
 sudo apt update
 sudo apt install -y build-essential git python3-dev python3-venv
 ./setup.sh```
-```bash
+```
 
 2. Create and activate a venv (recommended):
 
@@ -50,30 +50,21 @@ This will:
 
 - Install Python dependenciescd /home/hangye/rust/cst-tree
 
-- Build the language librarypython3 -m venv .venv
-
+- Build the language library
+```bash
+python3 -m venv .venv
 source .venv/bin/activate
-
 ## Usagepip install -r requirements.txt
-
 ```
-
 Basic usage:
-
-```bash3. Prepare a Rust source file named `test.rs` in this directory (or point the script to another path).
-
+Prepare a Rust source file named `test.rs` in this directory (or point the script to another path).
+```bash
 python3 splice_rust.py input.rs
-
-```4. Run the parser:
-
-
-
-With options:```bash
-
-```bashpython3 parse_rust.py test.rs
-
+```
+4. Run the parser with options:
+```bash
+python3 parse_rust.py test.rs
 python3 splice_rust.py input.rs --output output.rs --mutations 10 --seed 42```
-
 ```
 
 What the script does
