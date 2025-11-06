@@ -54,7 +54,8 @@ This will:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-## Usagepip install -r requirements.txt
+## Usage
+pip install -r requirements.txt
 ```
 Basic usage:
 Prepare a Rust source file named `test.rs` in this directory (or point the script to another path).
