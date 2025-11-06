@@ -30,22 +30,17 @@ A Python-based tool for performing semantic-aware code mutations on Rust source 
 
 ```bash
 Quick setup (Linux)
-
 git clone <repository-url>
-
-cd cst-tree1. Install system build deps (one-liner for Debian/Ubuntu-like systems):
-
-```
-
+cd cst-tree
 ```bash
 
-2. Run the setup script:sudo apt update
+2. Run the setup script
 
-```bashsudo apt install -y build-essential git python3-dev python3-venv
-
+```bash
+sudo apt update
+sudo apt install -y build-essential git python3-dev python3-venv
 ./setup.sh```
-
-```
+```bash
 
 2. Create and activate a venv (recommended):
 
