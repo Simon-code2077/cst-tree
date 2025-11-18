@@ -11,6 +11,8 @@ Usage: python3 splice_rust.py input.rs [--output output.rs] [--mutations N]
 import argparse
 import random
 import sys
+import subprocess
+import os
 from pathlib import Path
 from collections import defaultdict
 from typing import Dict, List, Tuple, Optional
@@ -29,9 +31,46 @@ TREE_SITTER_RUST = VENDOR_DIR / "tree-sitter-rust"
 
 
 def ensure_language_built():
-    """Ensure Rust language library exists"""
-    if not RUST_SO.exists():
-        print("Language library not found. Please run parse_rust.py first to build it.")
+    """Ensure Rust language library exists, build it if necessary"""
+    if RUST_SO.exists():
+        print(f"✅ Language library found at {RUST_SO}")
+        return
+    
+    print("📦 Building language library...")
+    
+    # Check if tree-sitter-rust exists
+    if not TREE_SITTER_RUST.exists():
+        print("❌ tree-sitter-rust not found at", TREE_SITTER_RUST)
+        print("📥 Cloning tree-sitter-rust...")
+        try:
+            subprocess.run([
+                "git", "clone", 
+                "https://github.com/tree-sitter/tree-sitter-rust",
+                str(TREE_SITTER_RUST)
+            ], check=True)
+            # Checkout a specific version
+            subprocess.run([
+                "git", "-C", str(TREE_SITTER_RUST),
+                "checkout", "v0.20.4"
+            ], check=False)  # Don't fail if checkout fails
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Failed to clone tree-sitter-rust: {e}")
+            sys.exit(1)
+    
+    # Create build directory
+    BUILD_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # Build the language library
+    try:
+        print(f"🔨 Compiling tree-sitter Rust grammar...")
+        from tree_sitter import Language
+        Language.build_library(
+            str(RUST_SO),
+            [str(TREE_SITTER_RUST)]
+        )
+        print(f"✅ Language library built successfully at {RUST_SO}")
+    except Exception as e:
+        print(f"❌ Failed to build language library: {e}")
         sys.exit(1)
 
 
@@ -394,8 +433,11 @@ class NodeReplacer:
         indent = "  " * depth
         print(f"{indent}🎯 [Replacement #{mutations_count[0] + 1}] {node_type} (depth {depth})")
         print(f"{indent}   Position: {node.start_byte}-{node.end_byte}")
-        print(f"{indent}   Original: '{original_text.decode('utf-8', errors='replace').replace('\n', '\\n')}'")
-        print(f"{indent}   Replace with: '{replacement.decode('utf-8', errors='replace').replace('\n', '\\n')}'")
+        
+        original_preview = original_text.decode('utf-8', errors='replace').replace('\n', '\\n')
+        replacement_preview = replacement.decode('utf-8', errors='replace').replace('\n', '\\n')
+        print(f"{indent}   Original: '{original_preview}'")
+        print(f"{indent}   Replace with: '{replacement_preview}'")
         
         # Perform replacement
         result_bytes[node.start_byte:node.end_byte] = replacement
@@ -450,6 +492,88 @@ class NodeReplacer:
                 if child and child.id == node.id:
                     return i == 1  # Second child (index 1) is usually the function name
         return False
+    
+    def replace_first_function_block(self, source_bytes: bytes, tree) -> Optional[bytes]:
+        """Replace the block of the first function_item with other block candidates"""
+        # Collect all nodes first
+        self.collect_nodes(source_bytes, tree)
+        
+        # Check if we have block candidates
+        if 'block' not in self.node_pools or len(self.node_pools['block']) <= 1:
+            print("❌ No block candidates available for replacement")
+            return None
+        
+        # Find the first function_item node
+        first_function = self._find_first_function_item(tree.root_node)
+        if not first_function:
+            print("❌ No function_item found in source code")
+            return None
+        
+        print(f"✅ Found first function_item at position {first_function.start_byte}-{first_function.end_byte}")
+        
+        # Find the block node within this function_item
+        function_block = self._find_block_in_function(first_function)
+        if not function_block:
+            print("❌ No block found in first function_item")
+            return None
+        
+        print(f"✅ Found block at position {function_block.start_byte}-{function_block.end_byte}")
+        
+        # Get the original block text
+        original_block = source_bytes[function_block.start_byte:function_block.end_byte]
+        print(f"📝 Original block:\n{original_block.decode('utf-8', errors='replace')}\n")
+        
+        # Get list of other blocks to replace with
+        replacement_candidates = [b for b in self.node_pools['block'] if b != original_block]
+        
+        if not replacement_candidates:
+            print("❌ No different block candidates available")
+            return None
+        
+        # Choose a random replacement block
+        replacement_block = self.rng.choice(replacement_candidates)
+        print(f"🎯 Replacement block:\n{replacement_block.decode('utf-8', errors='replace')}\n")
+        
+        # Perform replacement
+        result_bytes = bytearray(source_bytes)
+        result_bytes[function_block.start_byte:function_block.end_byte] = replacement_block
+        
+        print("✅ Replacement completed!")
+        
+        # Verify the result can be parsed
+        try:
+            new_tree = self.parser.parse(bytes(result_bytes))
+            if new_tree.root_node.has_error:
+                print("⚠️  Result has syntax errors")
+            else:
+                print("✅ Result is syntactically correct")
+        except Exception as e:
+            print(f"⚠️  Error verifying result: {e}")
+        
+        return bytes(result_bytes)
+    
+    def _find_first_function_item(self, node: Node) -> Optional[Node]:
+        """Find the first function_item node in the tree"""
+        if node.type == 'function_item':
+            return node
+        
+        for i in range(node.child_count):
+            child = node.child(i)
+            if child:
+                result = self._find_first_function_item(child)
+                if result:
+                    return result
+        
+        return None
+    
+    def _find_block_in_function(self, function_node: Node) -> Optional[Node]:
+        """Find the block node within a function_item"""
+        for i in range(function_node.child_count):
+            child = function_node.child(i)
+            if child and child.type == 'block':
+                return child
+        
+        return None
 
 
 def parse_and_replace(input_path: Path, output_path: Optional[Path] = None, 
@@ -503,23 +627,69 @@ def parse_and_replace(input_path: Path, output_path: Optional[Path] = None,
         print(result.decode('utf-8', errors='replace'))
 
 
+def parse_and_replace_first_function_block(input_path: Path, output_path: Optional[Path] = None, 
+                                           seed: int = 42) -> None:
+    """Parse and replace the block of the first function_item with other blocks"""
+    ensure_language_built()
+    
+    # Load language
+    RUST = Language(str(RUST_SO), "rust")
+    
+    # Read input file
+    source_bytes = input_path.read_bytes()
+    
+    # Parse
+    parser = Parser()
+    parser.set_language(RUST)
+    tree = parser.parse(source_bytes)
+    
+    print(f"📖 Parsing file: {input_path}")
+    print(f"📊 File size: {len(source_bytes)} bytes")
+    print()
+    
+    # Create replacer
+    replacer = NodeReplacer(RUST, seed)
+    
+    # Replace first function's block
+    result = replacer.replace_first_function_block(source_bytes, tree)
+    
+    if result is None:
+        print("❌ No replacement result generated")
+        return
+    
+    print("\n=== Replaced Code ===")
+    print(result.decode('utf-8', errors='replace'))
+    
+    # Output result
+    if output_path:
+        output_path.write_bytes(result)
+        print(f"\n✅ Result saved to: {output_path}")
+    
+    return result
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Demonstrate tree-sitter node replacement")
+    parser = argparse.ArgumentParser(description="Demonstrate tree-sitter node replacement for Rust code")
     parser.add_argument("input", help="Input Rust file")
     parser.add_argument("--output", "-o", help="Output file path")
-    parser.add_argument("--mutations", "-m", type=int, default=16, help="Number of mutations (default: 1)")
+    parser.add_argument("--mutations", "-m", type=int, default=16, help="Number of mutations (default: 16)")
     parser.add_argument("--seed", "-s", type=int, default=42, help="Random seed (default: 42)")
+    parser.add_argument("--replace-first-block", action="store_true", 
+                       help="Replace the block of the first function_item with other blocks")
     
     args = parser.parse_args()
     
     input_path = Path(args.input)
     if not input_path.exists():
-        print(f"File does not exist: {input_path}")
+        print(f"❌ File does not exist: {input_path}")
         sys.exit(1)
     
     output_path = Path(args.output) if args.output else None
     
-    parse_and_replace(input_path, output_path, args.mutations, args.seed)
+    if args.replace_first_block:
+        parse_and_replace_first_function_block(input_path, output_path, args.seed)
+    else:
+        parse_and_replace(input_path, output_path, args.mutations, args.seed)
 
 
 if __name__ == "__main__":
